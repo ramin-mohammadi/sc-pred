@@ -1,4 +1,4 @@
-# CelliD-Python
+# sc-pred
 
 ## Description
 Python package for cell identity recognition at individual cell level from single-cell RNA-seq data.<br/><br/>
