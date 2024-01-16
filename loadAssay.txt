@@ -1,0 +1,22 @@
+1. In RStudio, create a new file and load required libraries, read from .rds, then write to .csv
+2. Go to file explorer and inside of the folder where your R file is and drag both csv files written in R project to your python coding directory
+
+# Example R code for an R file in RStudio using the BARON DATASET
+if(!require("tidyverse")) install.packages("tidyverse")
+if(!require("ggpubr")) install.packages("ggpubr")
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("CelliD")
+library(CelliD)
+library(tidyverse) # general purpose library for data handling
+library(ggpubr) #library for plotting
+
+# raw gene expression data
+# must do 2 writes to csv for the baron raw gene expression data because too large for one write
+BaronMatrix   <- readRDS(url("https://storage.googleapis.com/cellid-cbl/BaronMatrix.rds"))
+write.csv(BaronMatrix, "BaronMatrixFirstHalf.csv")
+write.csv(BaronMatrix[11000:nrow(BaronMatrix) , ], "BaronMatrixLastHalf.csv")
+
+# meta data
+BaronMetaData <- readRDS(url("https://storage.googleapis.com/cellid-cbl/BaronMetaData.rds"))
+write.csv(BaronMetaData, "BaronMeta.csv")

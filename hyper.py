@@ -1,256 +1,192 @@
 import numpy as np
 import pandas as pd
-import dist, sys, csv
+import sys
 from scipy.stats import hypergeom, false_discovery_control
 
-# X is an object containing 2 pandas data frames of the coordinates for genes and cells (results from running RunMCA() )
-# pathways is the GENE MARKER LIST
-# p_adjust if TRUE, apply Benjamini Hochberg correction to p-value (values in matrix A from hypergeo distribution)
-def RunCellHGT(X: object, pathways, n_features = 200, features = None, dims = range(50), minSize = 10, log_trans = True, p_adjust = True):
-    # Find DISTANCES between the coordinates of features (genes) and cells
-    # DT will be a pandas data frame, 2d matrix containing distances between genes and cells (rows are genes, cells are columns)
-    DT = dist.GetDistances(X)
-    print("Distance matrix:" , DT.shape)
-    print(DT)
-    # Optionally write distance results to CSV file
-    #DT.to_csv('Results_csv/CellGeneDistances.csv')
+"""
+    Copyright (C) 2023  Ramin Mohammadi
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program. If not, see <https://www.gnu.org/licenses>."""
     
-    print("ranking genes")
-    features = DT.index
+# Reference: https://github.com/RausellLab/CelliD
+
+"""
+Predicts cell type/gene set for each unknown cell using hypergeometric testing. First acquires the gene signature for every cell n 
+by keeping the n_genes smallest euclidean distance values per cell in the distance data frame DT. Then finds W_1,W_2, ... W_omega. 
+These are the genes in each gene set W_i that are in the genes list P, the genes in the gene expression matrix after any gene filtering 
+steps (W_i is a subset of P). The gene sets W_i that have < minSize number of genes are ignored. w is acquired being the intersection of 
+the genes between each cell's gene signature and W_i. Then, hypergeometric distribution is performed with a probability mass function 
+using variables described on line 120. Probability values (p-values) between each cell and gene set is acquired. Next, optionally adjust 
+p-values with Benjamini Hochberg correction on every cell among the gene sets and/or -log base 10 transform p-values (log transform only 
+scales the values and has no affect on the prediction results). Finally, cell's gene sets are predictied using rules described on line 155.
+input: 
+    - DT: pandas data frame, with genes as rows and cells as columns, of the euclidean distances between the coordinates of genes and cells
+    - gene_sets: pandas series where each index is labelled with the gene set/cell type name and each value is a list of genes in that gene set/cell type 
+    - n_genes: number of closest genes to keep per cell in the euclidean distance data frame, DT, to represent a cell's gene signature
+    - minSize: min number of genes that a gene set must have to keep it after taking subset of P
+    - p_adjust: if TRUE, apply Benjamini Hochberg correction, adjusting the p-values from hypergeo probability mass function
+    - log_trans: if TRUE, apply -log base 10 to p-values after BH correction (not necessary, just upscales small p-values to larger values)
+returns a pandas Series:
+    - index are the names of the unknown cells and values are the cell type/gene set predictions per cell      
+"""
+
+def RunCellHGT(DT: pd.DataFrame, gene_sets: pd.Series, n_genes = 200, minSize = 10, p_adjust = True, log_trans = False):    
+    print("\nRanking genes...")
+    genes = DT.index
     cells = DT.columns
     
-    # Target ------------------------------------------------------------------
-    # i is a matrix containing the INDICES of the genes with the smallest distance for each cell (column), sorted for each column -> (GENE RANKINGS FOR EACH CELL by row INDICE)
-    i = np.argsort(DT, axis=0)[range(n_features), :] 
-    # j is a vector of n_features repeated values in a range of the number of columns in the distance matrix. Example: 1111 2222 3333  -> the range is 1 to 3 inclusive but each value is repeated 4 times. Purpose is to be the column indice for the sparse matrix stored in TargetMatrix. i holds row indices and j holds column indices for the locations in the matrix to have value 1. 
-    j = np.repeat(np.array(range(len(DT.columns))), n_features) 
-    # TargetMatrix_df contains values 0 and 1 representing if the gene is within the cell's gene signature (top 200 genes with closest distance to that cell)
-    TargetMatrix = np.zeros(shape=(len(features), len(cells))) # create matrix of all zeros
-    j_index = 0
-    
+    # Obtain gene signature for each cell by keeping the n_genes closest genes to each cell using the distance matrix DT--------------------------
+    # i is a matrix containing the row INDICES of n_genes genes with the smallest distance from each cell (column), sorted least to greatest for each column 
+    # -> (GENE RANKINGS FOR EACH CELL by row INDICE)
+    i = np.argsort(DT, axis=0)[range(n_genes), :] 
+    # gene_signatures contains values 0 and 1 representing if the gene is within the cell's gene signature (top n_genes closest genes to that cell).
+    # Each column represents a cell's gene signature with values of 1 to corresponding genes.
+    gene_signatures = np.zeros(shape=(len(genes), len(cells))) # create matrix of all zeros
     for column_num in range(i.shape[1]):
         for row_num in range(i.shape[0]):
-            TargetMatrix[ i[row_num, column_num], j[j_index] ] = 1
-            j_index += 1    
-    print("TargetMatrix:")
-    TargetMatrix = pd.DataFrame(TargetMatrix, index=features, columns=cells)
-    #TargetMatrix.to_csv('Results_csv/targetMatrix_py.csv') 
-    print(TargetMatrix.shape)
-    print(TargetMatrix)
+            gene_signatures[ i[row_num, column_num], column_num ] = 1
+    gene_signatures = pd.DataFrame(gene_signatures, index=genes, columns=cells)
     # ------------------------------------------------------------------------
     
-    # Geneset (Gene marker dataset) -----------------------------------------------------------------
-    nPathInit = len(pathways) # number of cell types in gene marker dataset
-    cell_type_list = pathways.index
-    # Row by row, filter the genes in the gene marker dataset to be only the genes inside of the features list (genes from the input gene expression data)
-    new_gene_list= []
-    for i in range(len(pathways)): # iterate cell type by cell type
-        for gene in pathways[i]: # iterate gene by gene for ith cell type
-            if gene in features: # check if gene is a gene in the list of unknown cells
+    # Gene marker dataset -----------------------------------------------------------------
+    # Determine W_1,W_2, ... W_omega. These are the genes in each gene set W_i that are in the genes list P, the genes in the 
+    # gene expression matrix after any gene filtering steps (W_i is a subset of P)
+    nPathInit = len(gene_sets) # number of cell types/gene sets in gene marker dataset
+    cell_type_list = gene_sets.index
+    # Row by row (every cell type), filter the genes in the gene marker dataset to be only the genes contained in P
+    for i in range(len(gene_sets)): # iterate cell type by cell type
+        new_gene_list= []
+        for gene in gene_sets.iloc[i]: # iterate gene by gene for ith cell type
+            if gene in genes: # check if gene is a gene in the list of unknown cells
                 new_gene_list.append(gene)
-        pathways[i] = new_gene_list
-        new_gene_list = []
-    print("Genes that are in the features list: ")
-    print(pathways)
-    # IMPORTANT GENE MARKER FILTERING STEP: Only keep the cell types (rows) in the gene reference matrix, pathways, where the number of matched genes for a row is >= minSize
-    # pathways now stores data in a dictionary: {"cell type name 1": [list of genes], "cell type name 2": [list of genes], ...}
-    dict_pathways = {}
-    for i in range(len(pathways)):
-        if len(pathways[i]) >= minSize: # CHANGE 1 TO minSize
-            dict_pathways.update({cell_type_list[i]:pathways[i]}) 
-    pathways = dict_pathways
-    print("\n", pathways, "\n")
-    nPathEnd = len(pathways)
+        gene_sets.iloc[i] = new_gene_list
+        
+    # GENE MARKER FILTERING STEP: Only keep the cell types/gene sets, where the number of genes 
+    # in the cell type W_i after the above step is >= minSize (default is 10)
+    # gene_sets now stores data in a dictionary: {"cell type name 1": [list of genes], "cell type name 2": [list of genes], ...}
+    dict_gene_sets = {}
+    for i in range(len(gene_sets)):
+        if len(gene_sets.iloc[i]) >= minSize:
+            dict_gene_sets.update({cell_type_list[i] : gene_sets.iloc[i]}) 
+    gene_sets = dict_gene_sets
+    nPathEnd = len(gene_sets)
     nFiltPath = nPathInit - nPathEnd
-    # Stop Hypergeometric testing if there are no cell types in the gene reference data that have more than minSize (default val is 10) 
-    # genes that are present in the input gene expression data containing the unknown cells
+    # Stop Hypergeometric testing if there are no cell types in the gene reference dataset that have more than minSize (default val is 10) 
+    # genes that are present in the input gene expression data
     if nPathEnd == 0:
-        sys.exit(f"All pathways (possible cell types using the user-chosen gene marker dataset) have less than {minSize} features in common with the data")
-    print(f"{nPathEnd} pathways kept for hypergeometric test out of {nPathInit}, {nFiltPath} filtered as less than {minSize} features was present in the data")
-    print("\ncalculating features overlap\n")
-    # PathwayMat contains row INDICES of where the genes left in the gene marker data (pathways) are located in the distance matrix (DT)
-    # PathwayLen contains dictionary with length of gene list for each cell type
-    new_gene_list= []
-    PathwayLen = {} 
-    for key in pathways:
-        for gene in pathways.get(key):
-            new_gene_list.append(features.to_list().index(gene))
-        PathwayLen.update({key : len(new_gene_list)})
-        pathways[key] = new_gene_list 
-        new_gene_list = []
-    PathwayMat = pathways
-    print(PathwayMat)
-    print(PathwayLen)
-    j = [] # j will contain column indices
-    length_list = list(PathwayLen.values())
-    for i in range(len(PathwayMat)):
-        j.extend(np.repeat(i, length_list[i]))    
-    # IMPORTANT: PathwayMatrix is a sparse matrix for the GENE SET representing the genes in the distance matrix that are present in the reference gene marker dataset for every cell type.
-    # Value is 1 if the gene is present for that cell type. Rows are genes, columns are cell types 
-    PathwayMatrix = np.zeros(shape=(len(features), len(PathwayLen)))
-    j_index = 0
-    for key in PathwayMat:
-        for index in pathways.get(key):
-            PathwayMatrix[ index, j[j_index] ] = 1
-            j_index += 1    
-    PathwayMatrix =  pd.DataFrame(PathwayMatrix, index=features, columns=list(PathwayLen.keys()))
-    print("PathwayMatrix:" , PathwayMatrix.shape)
-    print(PathwayMatrix)
-    #PathwayMatrix.to_csv("Results_csv/pathway_matrix.csv")
+        sys.exit(f"All gene sets (possible cell types using the user-chosen gene marker dataset) have less than {minSize} genes in common with the data")
+    print(f"{nPathEnd} gene sets kept for hypergeometric testing out of {nPathInit} of the gene sets. {nFiltPath} gene sets were filtered as they had less than {minSize} genes present in the data")
+    
+    # Place gene sets (W) in columns (cell types as columns and genes in P as rows. Values of 1 represent the genes that are in the cell type/gene set) 
+    # gene_sets will contain row INDICES of where the genes in each gene set (W) are located in the distance matrix's (DT) gene list P (since W is a subset of P)
+    # W_len contains dictionary with length of gene list for each cell type (practically gene sets W in number format used for the probability mass function)
+    W_len = {}         
+    genes_list_p = genes.to_list() 
+    for key in gene_sets:        
+        gene_indice = []
+        for gene in gene_sets.get(key):
+            gene_indice.append(genes_list_p.index(gene)) # find index of gene in gene list P
+        W_len.update({key : len(gene_indice)})
+        gene_sets[key] = gene_indice 
+    # IMPORTANT: W_binary_matrix contains 0s and 1s representing the genes in each gene set/cell type, W, that are in gene list P.
+    # Value is 1 if the gene is present for that cell type. Rows are genes in gene list P, columns are cell types/gene sets
+    W_binary_matrix = np.zeros(shape=(len(genes), len(W_len)))
+    j = 0
+    for key in gene_sets:
+        for index in gene_sets.get(key):
+            W_binary_matrix[index, j] = 1
+        j += 1    
+    W_binary_matrix =  pd.DataFrame(W_binary_matrix, index=genes, columns=list(W_len.keys()))
     # ------------------------------------------------------------------------
     
-    # TargetMatrix contains 0s and 1s saying which of the genes are the top 200 closest to cell Y (represented by 1)
-    # PathwayMatrix contains 0s and 1s saying which of the genes are present (represented by 1) in the cell type (cell types determined from gene marker dataset used)
-     
+    # gene_signatures contains 0s and 1s representing which of the genes are the top n_genes closest to cell Y (represented by 1)
+    # W_binary_matrix contains 0s and 1s representing which of the genes are present (represented by 1) in the cell type (cell types determined from gene marker dataset used)
      
     # Hypergeo ----------------------------------------------------------------
+    # Perform probabiliy mass function, optionally benjamini hochberg correction and log transform, 
+    # then predict cell type, and assign not confident predictions with "unassigned".
     
-    # q: vector of quantiles representing the number of white balls drawn without replacement from an urn which contains both black and white balls.
-        # (number of genes that are both present in that cell type and are one of the n_features (200) closest genes to that unknown cell - 1)
-    # m: the number of white balls in the urn. (num of genes, for every cell type in gene reference dataset, that ARE in the distance Matrix)
-    # n: the number of black balls in the urn. (num of genes in the distance matrix that are NOT in that cell type)
-    # k: the number of balls drawn from the urn (default value is 200, representing the number of genes for every unknown cell, from distance matrix, that
-        # are being considered for that unknown cell (determined when gene ranking by closest distance of gene x to unknown cell y ))
+    # scipy hypergeom probability mass function: p(k, M, n, N) 
+    # n = W_i (number of genes in gene set/cell type after subsetting it from P)
+    # k = w_i,n (number of genes in intersection of W_i and cell n's gene signature)
+    # M = P (number of genes in input data after any gene filtering steps done before hyper geo testing)
+    # N = n_genes (number of genes in cell's gene signature)
     
-    # q is a pandas data frame where rows are the unknown cells and columns are the cell types from the PathwayMatrix. The values in the frame represent the number of genes that are both present in that cell type and are one of the n_features (200) closest genes to that unknown cell - 1. So if a value in q is 36, that means there were 37 genes that were both in that cell type and were one of the top 200 closest genes. The -1 may be done to help filter unknown cells that have 0 genes that meet the criteria above. 
-    # Important understanding: the column of the max value in every row is the cell type that the unknown cell is most closely related to
-    
-    q = pd.DataFrame(np.dot(np.transpose(TargetMatrix), PathwayMatrix) - 1 , index=TargetMatrix.columns, columns=PathwayMatrix.columns) # GET RID OF THE -1, messing up distribution results
-    
-    # q.to_csv("hyperdistrib_csv/q.csv", index=False)
-    # 112 OF Q's VALUES DIFFER BY a value of 1 when comparing python to R output (when using baron with panglao_pancreas)
-    # (most likely because of the varying distance values by decimals between R and python resulting in the ranking of genes to be off)
-    print("q:\n", q)
-    
-    m = PathwayLen # number of genes for each cell type after the filtering
-    print("m:\n", m)
-    # with open('hyperdistrib_csv/m.csv', 'w', newline='') as file:
-    #     writer = csv.writer(file)
-    #     writer.writerow(list(m.values())) 
+    n = list(W_len.values())
 
-    
-    
-    n = {}  
-    for key in m:
-        n.update({key : len(features) - m[key]})
-    print("n:\n", n)
-    # with open('hyperdistrib_csv/n.csv', 'w', newline='') as file:
-    #     writer = csv.writer(file)
-    #     writer.writerow(list(n.values())) 
-    
-    k = n_features
-    
-    print("performing hypergeometric test\n")
-    # Hypergeometric distribution stored in variable A: results in probability values (between 0 and 1) that unknown cell x is cell type y (based off of similarities of genes in gene ranking of the unknown cell and the genes in that cell type)    
-    
-    m = list(m.values())
-    n_list = list(n.values())
-    #Python version variables for hyper distrib func
-    N = 200
-    n = m
-    M = [m[i] + n_list[i] for i in range(len(m))] 
-    # q is the equivalent of x parameter in hypergeom.pmf()
-    q = q.astype("int")
+    # k is a pandas data frame where rows are the unknown cells and columns are the cell types of the gene sets. 
+    # IMPORTANT: Each value in k is a w, the number of genes overlapping between a cell's gene signature (top n_genes closest genes to the cell) and a gene set W
+    # (the number of genes in each intersection of (cell_n's gene signature and W_i gene set)
+    k = pd.DataFrame(np.dot(np.transpose(gene_signatures), W_binary_matrix), index=gene_signatures.columns, columns=W_binary_matrix.columns)
+    k = k.astype("int")
 
-    print("M", M)
+    M = len(genes)
+    
+    N = n_genes
 
-    print("performing hypergeometric test\n")
-    """
-    Hypergeometric distribution stored in variable A: results in probability values (between 0 and 1) that unknown cell x is cell type y (based off of similarities of genes in gene ranking of the unknown cell and the genes in that cell type)
-    pmf(k, M, n, N, loc=0) -> Probability mass function.
-
-    PYTHON HYPER DISTRIB FUNCTION:
-    M is the total number of objects, 
-    n is total number of Type I objects (equivalent to Rs WHITE BALLS). 
-    The random variate represents the number of Type I objects in N drawn without replacement from the total population.
-
-    R vs Python
-    q = k
-    m+n = M
-    m = n
-    """
-
-    # -> hypergeom distribution performed on every column (cell types) so iterate the columns for q, m, and n  
+    # Hypergeometric distribution stored in A: probability values (between 0 and 1) that unknown cell x is cell type y 
+    # rows are genes in P, columns are cell types/gene sets
     A = pd.DataFrame()
+    
+    # Probability mass function:
+    print("Performing hypergeometric test...\n")    
     i = 0
-
-    """
-    Ex: We have a collection of (m+n) -> (14804 for Baron test input) total genes and 46 of these genes are in this cell type.
-    If we choose 200 genes at random (number of genes being considered in gene ranking for an unknown cell), what is probability that 36 of these genes are both found in that cell type and unknown cell's gene ranking?
-
-    M: total num of genes
-    n: num of genes in this cell type (that are also found in the list of total genes)
-    N: 200 (n_features)
-    x: num of genes that are both found in that cell type and unknown cell's gene ranking
-    """
-
-    # loop to create A which contains results of hyper distribution for every unknown cell with every cell type
-    r = range(0, q.shape[0])
-    cells = list(q.columns)
-    # iterates cell type by cell type
+    cells = list(k.columns)
+    # iterate the cell types/gene sets
     for i in range(0, len(cells)):
-        # shift distribution of + 1 -> FALSE
-        # The + 1 is literally adding 1  to every value in the q column vector (undoing the -1 done when creating q)
-        # SO python vs R distribution is different b/c the q values are off by 1 but
-        # in python having +1 produces much more accurate results
-        prb = hypergeom.pmf(q.iloc[r, i] + 1, M=M[i], n=n[i], N=N)
-        A[cells[i]] = prb
-    A.index = q.index
-    print("A:")
-    print(A)
-    #A.to_csv("hyperdistrib_csv/A.csv")
+        prb = hypergeom.pmf(k=k.iloc[:, i], M=M, n=n[i], N=N) # generate probability for all unknown cells with the ith cell type/gene set
+        A[cells[i]] = prb # prb is a vector
+    A.index = k.index
+    print("Probabilities:")
+    print(A.T)
 
     """
-    RESULT (IMPORTANT) of RunCellHGT(): 
-    -A cell is considered as enriched in those gene sets for which the hypergeometric test p-value is < 1e-02 (0.01)  (-log10 corrected p-value > 2), after Benjamini Hochberg multiple testing correction (p_adjust).
-    -The RunCellHGT function will provide the -log10 corrected p-value for each cell and each signature evaluated, so a multi-class evaluation is enabled. When a disjointed classification is required, a cell will be assigned to the gene set with the lowest significant corrected p-value. If no significant hits are found, a cell will remain unassigned.
+    PREDICTING CELL TYPE: 
+    - A cell is considered as ENRICHED in those gene sets for which the hypergeometric test p-value is < 1e-02 (0.01) -> 
+    only if performing benjamini hochberg correction on probability values or performing neither BH correction nor log transformation,
+    OR if performing log transformation on the probability values / after BH correction, -log10 corrected p-value > 2.
+    - Simplified: enrichment ranges
+        - case 1: p-value < 0.01 : (neither BH correction nor log transform) or (just BH correction on p-values)
+        - case 2: p-value > 2 : (only log transform the probability values) or (BH correction then log transform p-values)
+    - When a disjointed classification is required (for a cell, there are multiple values/gene sets that are in the enriched range), 
+        - case 1: a cell will be assigned to the gene set with the LOWEST significant corrected p-value. 
+        - case 2: a cell will be assigned to the gene set with the LARGEST significant corrected p-value. 
+    - If no significant hits are found (cell is not enriched in any of the gene sets), a cell will remain unassigned.
     """
-
-    A = A.T
-
-    p_adjust = True
-    log_trans = True
 
     # Benjamini Hochberg multiple testing correction:
-    # method of Benjamini, Hochberg, and Yekutieli control the false discovery rate, the expected proportion of false discoveries amongst the rejected hypotheses.
+    # adjust p-values to control the false discovery rate.
     if p_adjust:
-        # column by column in A (columns are individual unknown cells),
-        # perform Benjamini Hochberg correction
-        for col in A.columns:
-            A[col] = false_discovery_control(A[col], method='bh')
-        print("Benjamini Hochberg Correction:\n", A)
-        #A.to_csv("hyperdistrib_csv/A_Hochberg.csv")
-
-    # -log base10 correct p-values in A, for each cell and each signature evaluated
-    if log_trans:
-        for col in A.columns:
-            A[col] = -np.log10(A[col])
-        print("log transformation:\n", A)
-        #A.to_csv("hyperdistrib_csv/using_my_q_A_minus_log10Correction.csv")
-
-    # A log bas 10 differences: values are different except for the significant value for each unkown cell. 
-    # For cells where it seems to not have a cell type, they both have insignificant values so should still result in unnamed cell
-    
+        # perform benjamini correction by rows, each individual unknown cell and its p-values among the gene sets.
+        A = pd.DataFrame(false_discovery_control(A, method='bh', axis=1), index=A.index, columns=A.columns)
+        print("Benjamini Hochberg Correction:\n", A.T)         
 
     # CELL TYPE PREDICTING
-    # result will be a dictionary where the key is the unknown cell name and value is the cell type prediction
-    # {unknown_cell : cell_type}
+    # prediction will be a series where the key is the unknown cell name and value is the cell type prediction
+    if (p_adjust and not log_trans) or (not p_adjust and not log_trans): # just benjamini correction or neither
+        prediction = A.idxmin(axis=1)  # take smallest p value for each unknown cell
+        for cell in prediction.index:
+            if np.min(A.loc[cell]) >= 0.01: # assign cell's whose most significant p value is not in enriched range as unassigned
+                prediction[cell] = "unassigned"
+    else: # BH correction then log transform, or no BH corr and log transform
+        # -log base10 transform p-values in A
+        A = -np.log10(A)
+        print("-Log base10 transformation:\n", A.T)   
+        prediction = A.idxmax(axis=1) # take largest p value for each unknown cell
+        for cell in prediction.index:
+            if np.max(A.loc[cell]) <= 2: # assign cell's whose most significant p value is not in enriched range as unassigned
+                prediction[cell] = "unassigned"
+    print("\nCell type/Gene set predictions:\n", prediction)
 
-    # pancreas_gs_prediction = {}
-    # for unknown_cell in A.columns:
-    #   pancreas_gs_prediction.append({unknown_cell : nA[unk]})
-
-    HGT_pancreas_gs = A
-
-    # For each cell, assess the signature (cell type) with the lowest corrected p-value (the max -log10 corrected p-value)
-    pancreas_gs_prediction = HGT_pancreas_gs.idxmax()
-
-    # For each cell, evaluate if the lowest p-value is significant
-    # if the max value in the column in HGT_pancreas_gs is > 2, then cell type prediction is kept. Otherwise, 
-    # cell type prediction is unassigned
-    for cell in pancreas_gs_prediction.index:
-        if np.max(HGT_pancreas_gs[cell]) <= 2:
-            pancreas_gs_prediction[cell] = "unassigned"
-    
-    return pancreas_gs_prediction
-    
+    return prediction
