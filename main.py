@@ -106,7 +106,7 @@ print(assay_df)
     # cellCoordinates: pandas data frame where rows are cells and columns are j (default value for j is 50) different dimensions
     # geneCoordinates: pandas data frame where rows are genes and columns are j (default value for j is 50) different dimensions
     # X: fuzzy-coded indicator matrix
-mca_result = RunMCA(assay_df, j=20) # j specifies number of dimensions for cell and gene coordinates (default, j=50)
+mca_result = RunMCA(assay_df, j=50) # j specifies number of dimensions for cell and gene coordinates (default, j=50)
 # NOTE: upon consecutive calls of generating coorddinates, the signs of the coordinate values may differ meaning one time the value will be positive and 
 # another time will be negative. BUT, the distance between gene X and cell Y is still always the SAME. Thus, does not affect the next step in cell 
 # identification being to find the distance between genes and cells in a j dimensional space.
@@ -139,7 +139,7 @@ print("Gene marker dataset:\n", panglao_pancreas)
 #------------------------
 
 # Step 6: HYPERGEOMETRIC Testing
-HGT = RunCellHGT(DT=DT, gene_sets=panglao_pancreas, n_genes=200, minSize=10, p_adjust=False, log_trans=False) 
+HGT = RunCellHGT(DT=DT, gene_sets=panglao_pancreas, n_genes=200, minSize=10, p_adjust=True, log_trans=False) 
 HGT.to_csv("test/cellTypePredictions_Baron/test.csv")
 #------------------------
 

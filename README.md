@@ -11,8 +11,31 @@ sc-pred is based off of the
 
 ## Table of Contents
 - [Installation](#installation)
+
+
 - [Usage](#usage)
+
+<ul>
+<ul>
+<li><a href="#step1">Step 1 - Store raw gene count data in a pandas data frame.</a></li>
+<li><a href="#optional_Restrict">Optional Step - Restricting the analysis to protein-coding genes</a></li>
+
+<li><a href="#optional_Remove_genes">Optional Step - Remove genes that are expressed in less than n cells.</a></li>
+<li><a href="#optional_meta">Optional Step - Store meta data</a></li>
+<li><a href="#step2">Step 2 - Preprocess the raw gene count data through natural log transformation, normalization, and scaling.</a></li>
+<li><a href="#optional_diff">Optional step - Keep the most differentially expressed genes</a></li>
+<li><a href="#step3">Step 3 - Multiple Correspondence Analysis (MCA) dimensionality reduction method</a></li>
+<li><a href="#optional_plot_coordinates">Optional step - Plot cell and gene coordinates</a></li>
+<li><a href="#step4">Step 4 - Find the euclidean distance between the coordinates of genes and cells among the j dimensions.</a></li>
+<li><a href="#step5">Step 5 - Acquire gene marker database with known cell types and their associated gene signatures.</a></li>
+<li><a href="#step6">Step 6 - Use hypergeometric testing to perform per-cell signature enrichment analysis against reference gene sets.</a></li>
+<li><a href="#optional_validate">Optional Step - Validate and see how many cells were incorrectly predicted using meta data of known cell types for each cell.</a></li>
+<li><a href="#optional_umap">Optional step - (UMAP/TSNE) Plot cells with their cell type predictions and actual cell types.</a></li>
+</ul>
+</ul>
+
 - [Results](#results)
+- [Author](#author)
 - [License](#license)
 
 ## Installation
@@ -22,9 +45,14 @@ pip install sc-pred
 
 ## Usage
 Any data used in the examples can be found in the zipped data folder within the repository.
+
+<div id="step1">
+
 ### Step 1 - Store raw gene count data in a pandas data frame. 
+</div>
 Genes are rows and columns are cells. Row and column names MUST be included. Values will represent gene expression of gene X in cell Y. Here, the Baron pancreas single-cell RNA-seq data set provided in <a href="https://www.sciencedirect.com/science/article/pii/S2405471216302666?via%3Dihub">Baron et al. 2016</a> is being utilized.<br>
 <br/>
+
 ```
 import pandas as pd
 import numpy as np
@@ -58,8 +86,12 @@ print(baron)
 gene count data frame: <br/>
 ![alt text](assets/images/raw_gene_count.png) <br/>
 
+<div id="optional_Restrict">
+
 ### Optional Step - Restricting the analysis to protein-coding genes
+</div>
 Using only genes found in the HgProteinCodingGenes list obtained from BioMart Ensembl release 100, version April 2020 (GrCH38.p13 for human, and GRCm38.p6 for mouse). Here the HgProteinCodingGenes was originally read from RStudio, after loading the R CelliD library, using: data("HgProteinCodingGenes"). Then, written to a .csv file to be read from python.
+
 ```
 ### Optional Step - Restricting genes to protein-coding genes
 HgProteinCodingGenes = pd.read_csv('HgProteinCodingGenes.csv')
@@ -71,14 +103,22 @@ print(baron)
 gene count data frame: <br/>
 ![alt text](assets/images/raw_gene_count_protein.png) <br/>
 
+<div id="optional_Remove_genes">
+
 ### Optional Step - Remove genes that are expressed in less than n cells.
+</div>
+
 ```
 genes = filter_genes(df=baron, n=5) # input dataframe must be genes as rows and cells as columns
 baron = baron.loc[genes]
 ```
 
+<div id="optional_meta">
+
 ### Optional Step - Store meta data
+</div>
 You can store meta data for the cells in a pandas data frame which can be used to group the cells in the following step for gene filtering. In the meta data frame, rows are cells and columns are different meta data. The meta data was originally stored in an R specific object (within a .rds file), so the data was read from RStudio then written to .csv files to be read from python.
+
 ```
 # meta data (optional)
 baron_meta = pd.read_csv('BaronMeta.csv')
@@ -89,8 +129,10 @@ meta data frame: <br/>
 ![alt text](assets/images/meta_data.png)<br/>
 
 
+<div id="step2">
 
 ### Step 2 (CRUCIAL STEP for determining accuracy of cell type prediction)- Preprocess the raw gene count data through natural log transformation, normalization, and scaling.
+</div>
 &nbsp;&nbsp;&nbsp;&nbsp; Using the preprocess function which utilizes <a href="https://numpy.org/doc/stable/reference/generated/numpy.log.html">numpy's natural log function</a> along with <a href="https://scikit-learn.org/stable/modules/preprocessing.html">sklearn's normalizing and scaling functions</a>, optionally choose which preprocessing steps to be done and the order of them. Can either be (1) normalizing, natural log transformation, then scaling, OR (2) natural log transformation, normalizing, then scaling. From there, filter which of the steps you want to perform by specifying False for the preprocess() function attributes. Can optionally add 1 as well for the (2) order after performing log transformation (may improve results). Observe preprocessData.py for better understanding.
 
 &nbsp;&nbsp;&nbsp;&nbsp; "Taking the log of the data can restore symmetry to the data."(<a href="https://www.sciencedirect.com/topics/computer-science/log-transformation">How precise are our estimates? Confidence intervals
@@ -111,8 +153,11 @@ Output: <br/>
 ![alt text](assets/images/preprocess1.png) <br/>
 ![alt text](assets/images/preprocess2.png) <br/>
 
+<div id="optional_diff">
 
 ### Optional step - Keep the most differentially expressed genes
+</div>
+
 **This may improve, worsen, or not affect the accuracy of the predictions.**<br>
 This step requires meta data for the cells to be grouped by. In this example, the cells are grouped by their known cell types (cell.type):<br>
 ![alt text](assets/images/meta_data2.png)<br/>
@@ -147,8 +192,11 @@ print(assay_df)
 
 ![alt text](assets/images/diff_genes2.png)<br/>
 
+<div id="step3">
 
 ### Step 3 - Multiple Correspondence Analysis (MCA) dimensionality reduction method
+</div>
+
 Generate cell and gene coordinates in a j dimensional space (j=50 dimensions by default). assay_df is the preprocessed raw gene count data frame with cells as rows and genes as columns. NOTE: upon consecutive calls of generating coorddinates, the signs of the coordinate values may differ meaning one time the value will be positive and another time will be negative. BUT, the distance between gene X and cell Y is still always the SAME. Thus, does not affect the next step in cell identification being to find the distance between genes and cells in a j dimensional space.
 ```
 # mca_result is an object containing:
@@ -158,7 +206,10 @@ Generate cell and gene coordinates in a j dimensional space (j=50 dimensions by 
 mca_result = RunMCA(assay_df, j=20) # j specifies number of dimensions for cell and gene coordinates (default, j=50)
 ```
 
+<div id="optional_plot_coordinates">
+
 ### Optional step - Plot cell and gene coordinates
+</div>
 Out of the j dimensions, they are condensed into 3 dimensions using umap-learn's UMAP method and plotly's plotting functions for visualization. Adjust the min_dist and n_neighbors parameters to change how the <a href="https://pair-code.github.io/understanding-umap/">UMAP</a> is visualized:<br>
 &nbsp;&nbsp;&nbsp;&nbsp;- n_neighbors: should be a value between 2 and 100. Low values will push UMAP to focus more on local structure by constraining the number of neighboring 
         points considered when analyzing the data in high dimensions, while high values will push UMAP towards representing the big-picture structure while losing fine detail. <br>
@@ -170,8 +221,11 @@ Visualize_Coordinates(cellCoordinates=mca_result.cellCoordinates, geneCoordinate
 ```
 <img src="assets/images/coordinate_plot.png" alt="coordinate UMAP plot" width="1000"/>
 
+<div id="step4">
 
 ### Step 4 - Find the euclidean distance between the coordinates of genes and cells among the j dimensions.
+</div>
+
 DT will be a pandas data frame, containing euclidean distances between genes and cells (rows are genes, cells are columns).
 ```
 DT = GetDistances(cellCoordinates=mca_result.cellCoordinates, geneCoordinates=mca_result.geneCoordinates)
@@ -181,7 +235,11 @@ Also, can optionally generate gene coordinates through barycentric relationship 
 DT = GetDistances(cellCoordinates=mca_result.cellCoordinates, geneCoordinates=mca_result.geneCoordinates, X=mca_result.X, barycentric=True)
 ```
 
+<div id="step5">
+
 ### Step 5 - Acquire gene marker database with known cell types and their associated gene signatures.
+</div>
+
 Create a pandas Series where every index represents a gene set/cell type (indexes should be labelled with the cell type/gene set name). The value at every index is a list of genes that are in the gene set/cell type. **The unknown cells will be predicted to be associated with one of these gene sets or none (labelled as "unassigned").** The <a href="https://panglaodb.se/">Panglao database</a> is used to acquire pancreatic cell-type gene signatures.
 ```
 panglao = pd.read_csv('https://panglaodb.se/markers/PanglaoDB_markers_27_Mar_2020.tsv.gz',sep='\t')
@@ -197,7 +255,11 @@ print("Gene marker dataset:\n", panglao_pancreas)
 ```
 <img src="assets/images/gene_marker_db.png" alt="gene marker db"/>
 
+<div id="step6">
+
 ### Step 6 - Use hypergeometric testing to perform per-cell signature enrichment analysis against reference gene sets.
+</div>
+
 Predict the cell type/gene set for each unknown cell using hypergeometric testing. First, the gene signature for every cell n is acquired 
 by keeping the n_genes (n_genes=200 by default) smallest euclidean distance values per cell in the distance data frame DT. Then, W_1,W_2, ... W_omega is determined
 which are the genes in each gene set W_i that are in the genes list P, the genes in the gene expression matrix after any gene filtering 
@@ -233,7 +295,11 @@ RunCellHGT() returns a pandas Series where the indexes are the names of the unkn
 HGT = RunCellHGT(DT=DT, gene_sets=panglao_pancreas, n_genes=200, minSize=10, p_adjust=False, log_trans=False) 
 ```
 
+<div id="optional_validate">
+
 ### Optional Step - Validate and see how many cells were incorrectly predicted using meta data of known cell types for each cell.
+</div>
+
 ```
 HGT.to_csv("cellTypePredictions_Baron/test.csv")
 correct_cell = pd.read_csv("data/Baron_ActualCellType.csv") # actual labelled cell type for the unknown cells
@@ -254,7 +320,11 @@ print("Count differ: ", count)
 print("Count of incorrect \"unassigned\" predictions: ", count_unassigned) 
 ```
 
+<div id="optional_umap">
+
 ### Optional step - Plot cells with their cell type predictions and actual cell types. 
+</div>
+
 Plot the UMAP or TSNE of the euclidean distances data frame where each point on the plot represents a cell. One UMAP will be labelled 
 with the predicted cell type and another UMAP will be labelled with the actual cell type for each cell. Must pass the euclidean distance 
 data frame where cells are rows and columns are genes (must transpose), a list of the cell type labels for each cell, a dictionary specifying a color for each cell type, 
@@ -291,39 +361,62 @@ Actual cell types for each cell: <br>
 <img src="assets/images/final_umap_actual.png" alt="umap actual"/>
 
 ## Results
-The following are the number of cells out of 8569 whose cell type was incorrectly predicted using the <a href="https://www.sciencedirect.com/science/article/pii/S2405471216302666?via%3Dihub">Baron single cell pancreas data</a> with different approaches:
+The following are the number of cells out of 8569 whose cell type was **incorrectly** predicted using the <a href="https://www.sciencedirect.com/science/article/pii/S2405471216302666?via%3Dihub">Baron single cell pancreas data</a> and the <a href="https://panglaodb.se/">Panglao gene marker database</a> with different approaches:
 <ul>    
     <li>746</li>
     <ul>
-        <li>Tea</li>
-        <li>Milk</li>
+        <li>Restricting genes to protein-coding genes</li>
+        <li>Remove genes expressed in less than 5 cells</li>
+        <li>preprocessing: +1, norm, scale</li>
+        <li>MCA: j=20 dimensions</li>
+        <li>Hypergeo: n_genes=200, minSize=10, p_adjust=False, log_trans=False</li>       
+    </ul>
+    <li>741</li>
+    <ul>
+        <li>Restricting genes to protein-coding genes</li>
+        <li>Remove genes expressed in less than 5 cells</li>
+        <li>preprocessing: +1, norm, scale</li>
+        <li>MCA: j=20 dimensions</li>
+        <li>Hypergeo: n_genes=400, minSize=10, p_adjust=False, log_trans=False</li>       
+    </ul>
+    <li>890</li>
+    <ul>
+        <li>Restricting genes to protein-coding genes</li>
+        <li>Remove genes expressed in less than 5 cells</li>
+        <li>preprocessing: +1, norm, log, scale</li>
+        <li>MCA: j=50 dimensions</li>
+        <li>Hypergeo: n_genes=200, minSize=10, p_adjust=True, log_trans=False</li>       
+    </ul>
+    <li>1842</li>
+    <ul>
+        <li>Restricting genes to protein-coding genes</li>
+        <li>Remove genes expressed in less than 5 cells</li>
+        <li>preprocessing: +1, log, norm, scale</li>
+        <li>MCA: j=50 dimensions</li>
+        <li>Hypergeo: n_genes=200, minSize=10, p_adjust=True, log_trans=False</li>       
     </ul>
 </ul>
-746 out of 8569 cells
 
-<br>
-- preprocessing: +1, norm, scale -> 830 out of 8569 cells
-- preprocessing: +1, norm, log, scale -> 886 out of 8569 cells
-- preprocessing: +1, norm, scale -> 886 out of 8569 cells
-- preprocessing: +1, log, +1, norm, scale -> 962 out of 8569 cells
-- preprocessing: +1, norm, scale, using top 1100 differentially expressed genes per cell type group -> 978 out of 8569 cells
-- preprocessing: +1, log, norm, scale, using top 1100 differentially expressed genes per cell type group  -> 1221 out of 8569 cells
-- preprocessing: +1, log, norm, scale -> 2001 out of 8569 cells
-- preprocessing: norm, scale (no +1 before hand) -> 4059 out of 8569 cells
+
+Results  of different preprocessing orders with the following parameters:<br>
+<ul>
+    <li>Restricting genes to protein-coding genes</li>
+    <li>Remove genes expressed in less than 5 cells</li>
+    <li>MCA: j=50 dimensions</li>
+    <li>Hypergeo: n_genes=200, minSize=10, p_adjust=True, log_trans=False</li>       
+</ul>
+Preprocessing:<br>
+<ul>
+    <li>+1, norm, scale -> 826 out of 8569 cells (# INCORRECT cells)</li>
+    <li>+1, norm, log, scale -> 890 out of 8569 cells</li>
+    <li>+1, log, norm, scale -> 1842 out of 8569 cells</li>
+    <li>+1, log, +1, norm, scale -> 944 out of 8569 cells</li>
+    <li>norm, scale (no +1 before doing preprocessing) -> 2737 out of 8569 cells</li>
+</ul>
+
+## Author
+- Ramin Mohammadi, rammoh5346@gmail.com
 
 ## License
 
-Copyright (C) 2023  Ramin Mohammadi
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses>.
+This package is under the GNU General Public License v3.0
