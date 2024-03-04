@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
-import mca_steps, csv, time, scipy
+import csv, time, scipy
+from Ramin123455 import mca_steps
 
 """
     Copyright (C) 2023  Ramin Mohammadi
