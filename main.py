@@ -1,13 +1,14 @@
 import pandas as pd
 import numpy as np
-from mca import RunMCA
-from hyper import RunCellHGT
-from visual import Visualize_Coordinates
-from preprocessData import preprocess
-from diff_exp import top_diff_exp_genes
-from dist import GetDistances
-from filter_genes import filter_genes
-from visual import Visualize_Distance_GeneExp
+from Ramin123455.mca import RunMCA
+from Ramin123455.hyper import RunCellHGT
+from Ramin123455.visual import Visualize_Coordinates
+from Ramin123455.preprocessData import preprocess
+from Ramin123455.diff_exp import top_diff_exp_genes
+from Ramin123455.dist import GetDistances
+from Ramin123455.filter_genes import filter_genes
+from Ramin123455.visual import Visualize_Distance_GeneExp
+
 """
     Copyright (C) 2023  Ramin Mohammadi
 
@@ -113,7 +114,7 @@ mca_result = RunMCA(assay_df, j=50) # j specifies number of dimensions for cell 
 #------------------------
 
 # Optional Step - Visualize umap of the cell and gene coordinates in 3D space (condenses j dimensions to 3)  
-# Visualize_Coordinates(cellCoordinates=mca_result.cellCoordinates, geneCoordinates=mca_result.geneCoordinates, n_neighbors=10, min_dist=0.5)
+Visualize_Coordinates(cellCoordinates=mca_result.cellCoordinates, geneCoordinates=mca_result.geneCoordinates, n_neighbors=10, min_dist=0.5)
 #------------------------
     
 # Step 4: Find the euclidean distance between the coordinates of genes and cells among the j dimensions.
@@ -140,7 +141,7 @@ print("Gene marker dataset:\n", panglao_pancreas)
 
 # Step 6: HYPERGEOMETRIC Testing
 HGT = RunCellHGT(DT=DT, gene_sets=panglao_pancreas, n_genes=200, minSize=10, p_adjust=True, log_trans=False) 
-HGT.to_csv("test/cellTypePredictions_Baron/test.csv")
+HGT.to_csv("cell_type_predictions_Baron.csv")
 #------------------------
 
 # Optional Step: Plot UMAP of the euclidean distance data frame and label each point (cell) with the predicted/actual cell type
