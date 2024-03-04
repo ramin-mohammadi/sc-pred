@@ -19,7 +19,6 @@ sc-pred is based off of the
 <ul>
 <li><a href="#step1">Step 1 - Store raw gene count data in a pandas data frame.</a></li>
 <li><a href="#optional_Restrict">Optional Step - Restricting the analysis to protein-coding genes</a></li>
-
 <li><a href="#optional_Remove_genes">Optional Step - Remove genes that are expressed in less than n cells.</a></li>
 <li><a href="#optional_meta">Optional Step - Store meta data</a></li>
 <li><a href="#step2">Step 2 - Preprocess the raw gene count data through natural log transformation, normalization, and scaling.</a></li>
@@ -35,10 +34,18 @@ sc-pred is based off of the
 </ul>
 
 - [Results](#results)
+- [Hardware](#hardware)
 - [Author](#author)
 - [License](#license)
 
 ## Installation
+- Make sure you have the latest version of python installed: https://www.python.org/downloads.
+- Download the requirements.txt file from https://github.com/RockLee117/sc-pred. Then, in the same directory as the .txt file, run the following command to download the required dependencies:
+```
+pip install -r requirements.txt
+```
+
+- Install the package:
 ```
 pip install sc-pred
 ```
@@ -56,13 +63,14 @@ Genes are rows and columns are cells. Row and column names MUST be included. Val
 ```
 import pandas as pd
 import numpy as np
-from mca import RunMCA
-from hyper import RunCellHGT
-from visual import Visualize_Coordinates
-from preprocessData import preprocess
-from diff_exp import top_diff_exp_genes
-from dist import GetDistances
-from filter_genes import filter_genes
+from Ramin123455.mca import RunMCA
+from Ramin123455.hyper import RunCellHGT
+from Ramin123455.visual import Visualize_Coordinates
+from Ramin123455.preprocessData import preprocess
+from Ramin123455.diff_exp import top_diff_exp_genes
+from Ramin123455.dist import GetDistances
+from Ramin123455.filter_genes import filter_genes
+from Ramin123455.visual import Visualize_Distance_GeneExp
 
 # raw gene count data
 df = pd.read_csv('BaronMatrixFirstHalf.csv')
@@ -293,6 +301,7 @@ and minSize as needed, and choose whether you want to adjust the p-values with B
 RunCellHGT() returns a pandas Series where the indexes are the names of the unknown cells and values are the cell type/gene set predictions per cell.
 ```
 HGT = RunCellHGT(DT=DT, gene_sets=panglao_pancreas, n_genes=200, minSize=10, p_adjust=False, log_trans=False) 
+HGT.to_csv("cell_type_predictions_Baron.csv")
 ```
 
 <div id="optional_validate">
@@ -301,9 +310,8 @@ HGT = RunCellHGT(DT=DT, gene_sets=panglao_pancreas, n_genes=200, minSize=10, p_a
 </div>
 
 ```
-HGT.to_csv("cellTypePredictions_Baron/test.csv")
-correct_cell = pd.read_csv("data/Baron_ActualCellType.csv") # actual labelled cell type for the unknown cells
-cell_pred = pd.read_csv("cellTypePredictions_Baron/test.csv") # predictions
+correct_cell = pd.read_csv("Baron_ActualCellType.csv") # actual labelled cell type for the unknown cells
+cell_pred = pd.read_csv("cell_type_predictions_Baron.csv") # predictions
 
 count = 0
 count_unassigned = 0
@@ -413,6 +421,11 @@ Preprocessing:<br>
     <li>+1, log, +1, norm, scale -> 944 out of 8569 cells</li>
     <li>norm, scale (no +1 before doing preprocessing) -> 2737 out of 8569 cells</li>
 </ul>
+
+# Hardware
+Processor: AMD Ryzen 7 5800 8-Core Processor, 3.40 GHz<br>
+RAM: 64.0 GB
+OS: 64 Bit Windows, x64-based processor
 
 ## Author
 - Ramin Mohammadi, rammoh5346@gmail.com
