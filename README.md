@@ -85,7 +85,7 @@ df2 = df2.astype('float64')
 
 baron = pd.concat([df,df2])
 ```
-This dataset was stored in an R specific object (within a .rds file), so the data was read from RStudio then written to .csv files to be read from python. The raw gene count matrix was too large to be written to a single .csv file in one write so had to do 2 writes along with 2 reads in python and concatenate the data read to one pandas data frame. NOTE, some of the lines of code above are specific to this situation.
+This dataset was stored in an R specific object (within a .rds file), so the data was read from RStudio then written to .csv files to be read from python. The raw gene count matrix was too large to be written to a single .csv file in one write so had to do 2 writes along with 2 reads in python and concatenate the data read to one pandas data frame. Please look at loadAssay.txt for an example. NOTE, some of the lines of code above are specific to this situation.
 
 ```
 print(baron)
