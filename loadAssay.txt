@@ -20,3 +20,6 @@ write.csv(BaronMatrix[11000:nrow(BaronMatrix) , ], "BaronMatrixLastHalf.csv")
 # meta data
 BaronMetaData <- readRDS(url("https://storage.googleapis.com/cellid-cbl/BaronMetaData.rds"))
 write.csv(BaronMetaData, "BaronMeta.csv")
+
+data("HgProteinCodingGenes")
+write.csv(HgProteinCodingGenes, file="HgProteinCodingGenes.csv")
