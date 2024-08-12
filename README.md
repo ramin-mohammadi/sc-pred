@@ -45,9 +45,9 @@ sc-pred is based off of the
 pip install -r requirements.txt
 ```
 
-- Install the package:
+- Install the package (Note this is a temporary package name):
 ```
-pip install sc-pred
+pip install Ramin123455
 ```
 
 ## Usage
