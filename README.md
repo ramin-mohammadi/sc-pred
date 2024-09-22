@@ -422,6 +422,31 @@ Preprocessing:<br>
     <li>norm, scale (no +1 before doing preprocessing) -> 2737 out of 8569 cells</li>
 </ul>
 
+### Tested Datasets UMAP's:
+#### Baron Pancreas
+Prediction:
+<img src="assets/images/final_umap_pred.png" alt="umap predictions"/>
+Actual:
+<img src="assets/images/final_umap_actual.png" alt="umap actual"/>
+
+#### Mouse Brain Hove
+Prediction:
+<img src="https://github.com/ramin-mohammadi/sc-pred/blob/main/test/predictions/count_umap/Hove_Count_Hove_MG_PREDICTION.png">
+Actual:
+<img src="https://github.com/ramin-mohammadi/sc-pred/blob/main/test/predictions/count_umap/Hove_Count_Hove_MG_ACTUAL.png">
+
+#### Lung Tabula Muris
+Prediction:
+<img src="https://github.com/ramin-mohammadi/sc-pred/blob/main/test/predictions/count_umap/Lung_Count_Lung_MG_PREDICTION.png">
+Actual:
+<img src="https://github.com/ramin-mohammadi/sc-pred/blob/main/test/predictions/count_umap/Lung_Count_Lung_MG_ACTUAL.png">
+
+#### PBMC 10x
+Prediction:
+<img src="https://github.com/ramin-mohammadi/sc-pred/blob/main/test/predictions/count_umap/PBMC_Count_PBMC_MG_PREDICTION_ORINGAL_COUNT.png">
+Actual:
+<img src="https://github.com/ramin-mohammadi/sc-pred/blob/main/test/predictions/count_umap/PBMC_Count_PBMC_MG_ACTUAL_ORIGINAL_COUNT.png">
+
 # Hardware
 Processor: AMD Ryzen 7 5800 8-Core Processor, 3.40 GHz<br>
 RAM: 64.0 GB
